@@ -8,17 +8,26 @@ Scheduled workflows only run from the default branch (`main`), so nothing runs u
 **Never commit private values.** Everything below marked *secret* goes in
 Settings → Secrets and variables → Actions → **Secrets**. Logs are public.
 
-## 1. Key pair (on your own computer)
+## 1. GitHub token for saving secrets (do this first)
 
-```
-openssl ecparam -name prime256v1 -genkey -noout -out private-key.pem
-openssl ec -in private-key.pem -pubout -out public-key.pem
-```
+The workflows save rotated tokens and the generated private key into secrets. On github.com:
 
-- Commit `public-key.pem` as `.well-known/appspecific/com.tesla.3p.public-key.pem`.
-- Secret `TESLA_PRIVATE_KEY`: the full contents of `private-key.pem`. Then keep the file offline or delete it.
+1. Profile picture → **Settings** → **Developer settings** → **Personal access tokens** → **Fine-grained tokens** → **Generate new token**.
+2. Name: `solar-controller-secrets`. Expiration: **No expiration** (if it expires, token rotation stops and you must sign in to Tesla again).
+3. Resource owner: your account. Repository access: **Only select repositories** → `alexmoggo.github.io`.
+4. Permissions → Repository permissions → **Secrets: Read and write**. Leave everything else as is.
+5. **Generate token** and copy it (shown once).
+6. Repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**: name `GH_SECRETS_PAT`, paste the token.
 
-## 2. Tesla developer app (developer.tesla.com)
+## 2. Key pair (generated inside GitHub, no computer needed)
+
+Repo → **Actions** → **Generate Tesla key pair (run once)** → **Run workflow**.
+
+- The private key goes straight into secret `TESLA_PRIVATE_KEY`; it is never shown or committed.
+- The public key is committed to `.well-known/appspecific/com.tesla.3p.public-key.pem`.
+- Check it is live: `https://alexmoggo.github.io/.well-known/appspecific/com.tesla.3p.public-key.pem`.
+
+## 3. Tesla developer app (developer.tesla.com)
 
 - Allowed origin: `https://alexmoggo.github.io`
 - Redirect URI: `https://alexmoggo.github.io/`
@@ -38,7 +47,7 @@ python scripts/tesla_setup.py auth       # prints the TESLA_TOKENS value
 - Secret `TESLA_VIN`: the car's VIN.
 - Pair the key: open `https://tesla.com/_ak/alexmoggo.github.io` on the phone with the Tesla app.
 
-## 3. iSolarCloud developer app (developer-api.isolarcloud.com)
+## 4. iSolarCloud developer app (developer-api.isolarcloud.com)
 
 - Create an OAuth2 app with redirect URL `https://alexmoggo.github.io/` and wait for approval.
 - Secrets `SUNGROW_APPKEY` and `SUNGROW_SECRET_KEY`.
@@ -52,12 +61,6 @@ python scripts/sungrow_setup.py
 - Secret `SUNGROW_PLANT_ID`: the plant ID printed.
 - Compare the two printed power values with the iSolarCloud app. If `83002` matches better than
   `83033`, set the variable `SUNGROW_POWER_POINT` to `83002`.
-
-## 4. Token rotation
-
-Tesla and iSolarCloud refresh tokens rotate, so the workflow must save new ones. Create a
-**fine-grained personal access token** limited to this repository with
-**Repository permissions → Secrets: Read and write**. Store it as secret `GH_SECRETS_PAT`.
 
 ## 5. Variables (Settings → Secrets and variables → Actions → Variables)
 

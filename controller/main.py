@@ -90,6 +90,11 @@ def main() -> int:
         house_load_w=float(env("HOUSE_LOAD_W", "1000")),
         min_amps=int(env("MIN_AMPS", "5")),
     )
+    missing = [n for n in ("SUNGROW_APPKEY", "SUNGROW_SECRET_KEY", "SUNGROW_TOKENS", "SUNGROW_PLANT_ID") if not os.environ.get(n)]
+    if missing:
+        # Not set up yet: exit cleanly so scheduled runs don't fail every 5 minutes.
+        print(f"Not configured yet, skipping. Missing secrets: {', '.join(missing)}")
+        return 0
     state = load_state()
 
     month = now.strftime("%Y-%m")

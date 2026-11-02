@@ -1,0 +1,57 @@
+name: Generate Tesla key pair (run once)
+
+# Generates a prime256v1 key pair inside GitHub. The private key is encrypted
+# straight into the TESLA_PRIVATE_KEY secret and is never printed or committed.
+# Only the public key is committed, to the path Tesla reads it from.
+on:
+  workflow_dispatch:
+    inputs:
+      replace_existing:
+        description: "Replace an existing key (the car must be re-paired afterwards)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  keygen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Refuse to overwrite an existing key
+        if: ${{ !inputs.replace_existing }}
+        run: |
+          if [ -f .well-known/appspecific/com.tesla.3p.public-key.pem ]; then
+            echo "::error::A public key already exists. Re-run with 'replace_existing' ticked only if you intend to re-pair the car."
+            exit 1
+          fi
+
+      - name: Generate key pair and store private key as a secret
+        env:
+          GH_SECRETS_PAT: ${{ secrets.GH_SECRETS_PAT }}
+        run: |
+          umask 077
+          tmp=$(mktemp -d)
+          openssl ecparam -name prime256v1 -genkey -noout -out "$tmp/private.pem"
+          mkdir -p .well-known/appspecific
+          openssl ec -in "$tmp/private.pem" -pubout -out .well-known/appspecific/com.tesla.3p.public-key.pem
+          python -c "import sys; from controller.secrets_store import update_secret; update_secret('TESLA_PRIVATE_KEY', open(sys.argv[1]).read())" "$tmp/private.pem"
+          shred -u "$tmp/private.pem" || rm -f "$tmp/private.pem"
+          echo "Private key saved to secret TESLA_PRIVATE_KEY."
+
+      - name: Commit public key
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .well-known/appspecific/com.tesla.3p.public-key.pem
+          git commit -m "Add Tesla public key"
+          git push
+          echo "Public key will be live at https://alexmoggo.github.io/.well-known/appspecific/com.tesla.3p.public-key.pem after Pages rebuilds."
